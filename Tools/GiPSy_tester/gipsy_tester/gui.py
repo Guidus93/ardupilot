@@ -64,6 +64,11 @@ class GipsyTesterApp(tk.Tk):
         self._connect_btn = ttk.Button(top, text="Connect", command=self._on_connect)
         self._connect_btn.grid(row=0, column=3, padx=4)
 
+        self._autoconnect_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            top, text="Auto-connect on scan", variable=self._autoconnect_var
+        ).grid(row=1, column=1, columnspan=2, sticky="w", padx=4)
+
         leds = ttk.LabelFrame(self, text="Status")
         leds.grid(row=1, column=0, sticky="ew", **pad)
 
@@ -82,12 +87,37 @@ class GipsyTesterApp(tk.Tk):
         )
 
     def _on_scan(self) -> None:
+        # Don't yank a live connection out from under the user on a rescan.
+        if self._monitor is not None:
+            self._status_var.set("Disconnect before scanning again")
+            return
+
         self._ports = port_scan.find_candidate_ports()
         labels = [p.label for p in self._ports]
         self._port_combo["values"] = labels
-        if labels:
-            self._port_combo.current(0)
-        self._status_var.set(f"Found {len(labels)} candidate port(s)" if labels else "No ports found")
+        if not labels:
+            self._status_var.set("No ports found")
+            return
+
+        # Auto-select the first exact VID:PID match if there is one; the
+        # COM number itself is irrelevant to the operator (each board keeps
+        # a stable number derived from its CPU UID -- see cleanup script).
+        strong_idx = next(
+            (i for i, p in enumerate(self._ports) if p.strong_match), None
+        )
+        self._port_combo.current(strong_idx if strong_idx is not None else 0)
+
+        if strong_idx is not None:
+            self._status_var.set(
+                f"Found ArduPilot board on {self._ports[strong_idx].device}"
+            )
+            if self._autoconnect_var.get():
+                self._on_connect()
+        else:
+            self._status_var.set(
+                f"{len(labels)} port(s), none matched ArduPilot's USB ID -- "
+                "pick one and Connect (best guess selected)"
+            )
 
     def _selected_port(self) -> str | None:
         idx = self._port_combo.current()

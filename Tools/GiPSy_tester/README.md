@@ -21,8 +21,12 @@ python run.py
 ```
 
 1. Plug in the board over USB.
-2. Click **Scan** to list candidate ports (filtered by ArduPilot's
-   USB VID:PID `1209:5741`, falling back to description matching).
+2. Click **Scan**. The tool auto-selects the port matching ArduPilot's
+   USB VID:PID `1209:5741`, so you don't need to know the COM number.
+   With **Auto-connect on scan** ticked (the default) it also starts
+   connecting immediately — plug in, click Scan, done. If no port
+   matches the exact USB ID, it falls back to a description-based best
+   guess and leaves connecting to you.
 3. Select the port, click **Connect**. You can click it right away —
    no need to wait or count seconds yourself.
    - After flashing or a power-up the board sits in its bootloader for
@@ -54,16 +58,24 @@ check, not ArduPilot's internal calibration-aware health verdict.
 
 ## Windows COM port buildup
 
-ArduPilot boards' bootloader and application firmware both use the
-same USB VID:PID, but Windows treats each as its own device instance
-(and remembers the COM number even after unplugging). Repeated
-flash/reboot cycles create many stale COM port entries over time.
+Each board reports a USB serial number derived from its STM32 CPU UID
+(`%SERIAL%` in the hwdef, expanded from `UDID_START` — see
+`libraries/AP_HAL_ChibiOS/hwdef/common/usbcfg_common.c`). That serial
+is stable for a given board across replugs and across the
+bootloader↔app jump, so **the same board always gets the same COM
+number** — you don't need to manage it, and the tool auto-selects it
+by VID:PID regardless. What *does* accumulate is one permanent COM
+entry per *distinct* board you've ever plugged into this PC (each has a
+different UID), which clutters Device Manager over a long bench
+session.
 
 `scripts/cleanup_com_ports.ps1` lists and (with `-Remove`, from an
-elevated PowerShell) removes stale ArduPilot serial device entries
-— it never touches devices that are currently plugged in. Run it
-manually and periodically; the app itself does not modify Windows
-device state.
+elevated PowerShell) removes ArduPilot serial device entries that are
+**not currently present** — it never touches a plugged-in device. Run
+it manually and periodically; the app itself does not modify Windows
+device state (an unprivileged app can't reclaim COM numbers, and
+closing a port on Disconnect frees nothing while the board is still
+attached).
 
 ## Not covered by this tool
 

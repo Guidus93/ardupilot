@@ -6,14 +6,15 @@
     plugged in or switches between bootloader and app mode.
 
 .DESCRIPTION
-    ArduPilot ChibiOS boards report a persistent USB serial number
-    derived from the CPU UID, but the bootloader and application
-    firmware enumerate as separate device instances even for the
-    same physical board (same VID:PID 1209:5741, different USB
-    configuration/state). Windows keeps a device node - and COM
-    port assignment - per instance ID it has ever seen, even after
-    the device is unplugged. Over many flash/reboot cycles this
-    accumulates a large number of dead COM ports in Device Manager.
+    ArduPilot ChibiOS boards report a USB serial number derived from
+    the STM32 CPU UID (the %SERIAL% hwdef token, expanded from
+    UDID_START). That serial is stable for a given board across
+    replugs and across the bootloader<->app jump, so a single board
+    keeps the same COM port. What accumulates instead is one device
+    node - and COM assignment - per *distinct* board (each has its own
+    UID) that has ever been plugged into this PC. Windows keeps those
+    nodes even after the board is gone, so a long bench session across
+    many boards clutters Device Manager with dead COM ports.
 
     This script only targets devices matching ArduPilot's VID
     (1209). It NEVER touches a device that is currently connected -

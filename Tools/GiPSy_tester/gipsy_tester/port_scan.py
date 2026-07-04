@@ -31,14 +31,21 @@ class CandidatePort:
     vid: int | None
     pid: int | None
     serial_number: str | None
+    # True when matched on ArduPilot's exact USB VID:PID (high confidence);
+    # False when only a description/manufacturer hint matched (a guess).
+    strong_match: bool = False
 
     @property
     def label(self) -> str:
         return f"{self.device} ({self.description})"
 
 
+def _is_vidpid_match(info) -> bool:
+    return info.vid == ARDUPILOT_VID and info.pid in ARDUPILOT_PIDS
+
+
 def _matches(info) -> bool:
-    if info.vid == ARDUPILOT_VID and info.pid in ARDUPILOT_PIDS:
+    if _is_vidpid_match(info):
         return True
     text = f"{info.description or ''} {info.manufacturer or ''}".lower()
     return any(hint in text for hint in DESCRIPTION_HINTS)
@@ -58,6 +65,7 @@ def find_candidate_ports() -> list[CandidatePort]:
             vid=p.vid,
             pid=p.pid,
             serial_number=p.serial_number,
+            strong_match=_is_vidpid_match(p),
         )
         for p in ordered
     ]

@@ -33,10 +33,14 @@ and the baro is streaming plausible data. 4 LEDs, red/green.
   `SCALED_PRESSURE` stream automatically once connected — no
   `REQUEST_DATA_STREAM`/`SET_MESSAGE_INTERVAL` needed from this
   tool.
-- Windows COM port buildup is caused by bootloader/app mode
-  enumerating as distinct device instances despite sharing VID:PID;
-  addressed with an opt-in `scripts/cleanup_com_ports.ps1`, not by
-  the app itself.
+- Windows COM port buildup is *not* from bootloader-vs-app: these
+  single-CDC boards expose a USB serial derived from the STM32 CPU UID
+  (`%SERIAL%` -> `UDID_START`, see `usbcfg_common.c`), which is stable
+  for a board across replugs and across the bootloader<->app jump. So
+  one board keeps one COM number; buildup is one permanent node per
+  *distinct* board ever plugged in. Addressed with an opt-in
+  `scripts/cleanup_com_ports.ps1` (removes not-present VID_1209 nodes),
+  not by the app -- an unprivileged app can't reclaim COM numbers.
 
 ## Conventions for this subfolder
 

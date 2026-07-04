@@ -24,6 +24,15 @@
       NOTE: verified in code + import test; still to be re-tested on the
       physical board.
 
+- [x] COM-port handling. Verified the COM number is stable per board
+      (USB serial = CPU UID via %SERIAL%/UDID_START), so buildup is one
+      node per *distinct* board, not per replug -- corrected the earlier
+      "bootloader/app = separate instance" explanation in README/CLAUDE.
+      Made the number a non-issue for the operator: Scan auto-selects the
+      exact VID:PID match and (opt-in, default on) auto-connects. Stale
+      Device Manager entries stay the cleanup script's job (an
+      unprivileged app can't reclaim COM numbers).
+
 ## Next
 - [ ] Confirm actual baud rate ArduPilot uses on USB CDC (currently
       assumes 57600 for the mavutil connection — USB CDC ignores the
