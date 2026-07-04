@@ -5,21 +5,30 @@ PatrionicPH7X board over USB before it leaves the bench: connects
 over the virtual COM port, detects bootloader-vs-app mode, and shows
 4 status LEDs (MAVLink heartbeat, IMU1, IMU2, Baro).
 
-## Setup
+## Setup and run (Windows, no command line needed)
+
+1. **Double-click `setup.bat`** once. It creates a local `.venv` and
+   installs the pinned dependencies. (Needs Python 3 installed from
+   [python.org](https://www.python.org/downloads/) with "Add to PATH"
+   ticked — `setup.bat` tells you if it's missing.)
+2. **Double-click `run.bat`** to start the tool. Run it any time; it
+   reuses the environment `setup.bat` created.
+
+No PyInstaller `.exe` is shipped on purpose: unsigned one-file exes
+built from Python get false-flagged by Windows Defender/SmartScreen.
+The two plain-text batch files avoid that and are easy to inspect.
+
+### Manual alternative (if you prefer a shell)
 
 ```
 cd Tools/GiPSy_tester
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-## Run
-
-```
 python run.py
 ```
 
+## Using the tool
 1. Plug in the board over USB.
 2. Click **Scan**. The tool auto-selects the port matching ArduPilot's
    USB VID:PID `1209:5741`, so you don't need to know the COM number.

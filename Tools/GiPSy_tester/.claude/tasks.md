@@ -40,5 +40,8 @@
       path still wants a value; verify no issues in practice)
 - [ ] Decide if PatrionicPH7X/GiPSy (full-size) need any per-board
       differences (assumption: no, protocol is board-agnostic)
-- [ ] Optional: package as a single .exe (PyInstaller) for handing
-      off to someone without a Python environment
+- [x] Package for handoff to a non-Python user. Chose two double-click
+      batch files (setup.bat builds .venv + installs pinned deps;
+      run.bat launches via pythonw) over a PyInstaller .exe, because
+      unsigned one-file exes get false-flagged by Defender/SmartScreen.
+      Both tested: fresh setup works, run.bat guards a missing venv.
