@@ -11,10 +11,18 @@
 ## Done (cont.)
 - [x] Test against a real GiPSy-mini board in both bootloader mode
       and app mode — sync probe correctly detects bootloader mode,
-      no false positives against live MAVLink. Found: first connect
-      after flashing needs a full power cycle, not just a
-      bootloader->app jump — see lessons.md. Updated the
-      bootloader-detected status message accordingly.
+      no false positives against live MAVLink.
+- [x] Fix the operator trap around the boot window. Earlier this was
+      misdiagnosed as "first connect after flashing needs a full power
+      cycle"; it's actually just the normal ~5s AP_Bootloader window
+      (HAL_BOOTLOADER_TIMEOUT) before the board jumps to the app, made
+      worse by our own up-front probe resetting that countdown via the
+      bootloader's cmd_bad path. Connect is now patient: it waits out a
+      15s boot window retrying a heartbeat and re-scanning ports (USB
+      re-enumeration can change the COM number), and only probes the
+      bootloader once, for diagnosis, if nothing boots. See lessons.md.
+      NOTE: verified in code + import test; still to be re-tested on the
+      physical board.
 
 ## Next
 - [ ] Confirm actual baud rate ArduPilot uses on USB CDC (currently

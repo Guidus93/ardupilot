@@ -23,14 +23,22 @@ python run.py
 1. Plug in the board over USB.
 2. Click **Scan** to list candidate ports (filtered by ArduPilot's
    USB VID:PID `1209:5741`, falling back to description matching).
-3. Select the port, click **Connect**.
-   - If the board is still in **bootloader mode**, the tool detects
-     this via the PX4-style sync handshake and tells you to flash
-     firmware first — it will not try to connect via MAVLink.
-   - Otherwise it opens a MAVLink connection and the four LEDs turn
-     green as HEARTBEAT / RAW_IMU / SCALED_IMU2 / SCALED_PRESSURE
-     messages arrive and stay green as long as they keep arriving
-     within ~2.5s.
+3. Select the port, click **Connect**. You can click it right away —
+   no need to wait or count seconds yourself.
+   - After flashing or a power-up the board sits in its bootloader for
+     ~5s before it boots the firmware on its own (this is normal — see
+     [ArduPilot's docs](https://ardupilot.org/copter/docs/common-loading-firmware-onto-pixhawk.html)).
+     The tool knows this: it shows a **"waiting for board to boot
+     (Ns left)"** countdown and keeps retrying for ~15s, so **don't
+     unplug the board during the countdown**.
+   - It also re-scans ports while waiting, because the USB COM number
+     can change when the board jumps from bootloader to application.
+   - Once a heartbeat arrives, the four LEDs turn green as HEARTBEAT /
+     RAW_IMU / SCALED_IMU2 / SCALED_PRESSURE messages arrive, and stay
+     green as long as they keep arriving within ~2.5s.
+   - Only if the whole ~15s window passes with no MAVLink does the tool
+     probe the bootloader once and tell you either to flash firmware
+     (still in bootloader) or to check firmware/power (no response).
 
 ## Why 2 IMU LEDs but no per-instance MAVLink health field
 

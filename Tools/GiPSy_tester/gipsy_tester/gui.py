@@ -2,9 +2,10 @@
 
 Flow:
   1. Scan -> list candidate ports (VID:PID / description match).
-  2. Connect -> probe bootloader sync handshake first. If the board
-     answers it, stop there and tell the user to flash firmware.
-     Otherwise hand the (still-closed) port to a MavlinkHealthMonitor.
+  2. Connect -> hand the port to a MavlinkHealthMonitor, which waits
+     out the bootloader boot window (retrying a heartbeat, re-scanning
+     ports) instead of probing the bootloader up front. See health.py
+     for why probing early is counterproductive.
   3. Poll the monitor's snapshot every 250ms and recolor the LEDs.
 """
 
@@ -13,7 +14,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from . import bootloader, port_scan
+from . import port_scan
 from .health import MavlinkHealthMonitor
 
 POLL_MS = 250
@@ -104,19 +105,11 @@ class GipsyTesterApp(tk.Tk):
             self._status_var.set("Select a port first")
             return
 
-        self._status_var.set(f"Probing {port_name} for bootloader...")
-        self.update_idletasks()
-
-        if bootloader.probe_bootloader(port_name):
-            self._status_var.set(
-                f"{port_name}: board is in BOOTLOADER mode. "
-                "If you just flashed it, unplug/replug USB (full power cycle) "
-                "before connecting again -- a bootloader->app jump alone is not enough."
-            )
-            self._set_all_leds(None)
-            return
-
-        self._status_var.set(f"Connecting to {port_name} via MAVLink...")
+        # No up-front bootloader probe: after flashing/power-up the board
+        # sits in the bootloader for ~5s and boots on its own, and a
+        # mistimed probe resets that countdown (see health.py). The
+        # monitor just waits out the boot window instead.
+        self._status_var.set(f"Waiting for {port_name} to boot...")
         self._monitor = MavlinkHealthMonitor(port_name, baud=MAVLINK_BAUD)
         self._monitor.start()
         self._connect_btn.config(text="Disconnect")
@@ -144,7 +137,16 @@ class GipsyTesterApp(tk.Tk):
         self._leds["imu2"].set_state(snap.imu2_ok)
         self._leds["baro"].set_state(snap.baro_ok)
 
-        if snap.last_error:
+        if snap.phase == "waiting":
+            self._set_all_leds(None)
+            self._status_var.set(
+                f"Waiting for board to boot ({snap.boot_wait_remaining:.0f}s left)... "
+                "just plugged in / flashed? give it a few seconds."
+            )
+        elif snap.phase == "failed":
+            self._set_all_leds(None)
+            self._status_var.set(snap.last_error or "Connection failed")
+        elif snap.last_error:
             self._status_var.set(snap.last_error)
         elif snap.mavlink_ok:
             self._status_var.set(
