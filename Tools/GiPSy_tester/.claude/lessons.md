@@ -65,3 +65,35 @@ Practical effect: if `setup.bat` ever fails again with "did not find
 executable", the fix is almost always a stale/broken `py` launcher
 registration on that machine, not a problem with this tool's
 dependencies -- `python --version` working directly is the tell.
+
+## When a PASS gate has several data sources, all of them must gate it
+
+The IMU/baro chip-type text sometimes never appeared even with values
+showing and LEDs green, and only a disconnect/reconnect ever fixed it.
+First fix attempt: retry the `PARAM_REQUEST_READ` for any devid param
+whose `PARAM_VALUE` reply never arrived (see health.py's
+`_devid_pending`/`_retry_missing_devid_params`). That helped but didn't
+fully fix it, because it treated the symptom (a dropped reply) without
+noticing the actual race: `_poll_health`'s PASS condition (`all_ok` in
+gui.py) only checked the 5 LED booleans. Those come from
+continuously-streamed sensor messages and go green fast. The type
+strings come from the *slower* `PARAM_VALUE` round trip. So as soon as
+the LEDs went green -- often before the type round trip finished --
+`_finish_test` fired and called `_stop_monitor()`, closing the
+connection the retry needed to ever land a reply on. No amount of
+retrying on the health-monitor side fixes a race that kills the
+monitor before the retry gets a chance.
+
+Fix: `all_ok` now also requires `imu1_type`/`imu2_type`/`baro_type` to
+be non-empty, not just the 5 LED booleans. The disconnect/reconnect
+"workaround" people found by hand wasn't fixing anything -- it was
+just giving the type round trip a fresh connection and enough
+wall-clock time to finish before something else raced to disconnect
+it.
+
+General lesson: when a readiness check (a PASS/ready/done gate) is
+fed by several independent data sources with different latencies,
+*all* of them need to be in the gate condition, not just the ones that
+happen to be fastest/most visible (LEDs, in this case). A partial gate
+will intermittently look "mostly done" and tear down state that a
+slower source still needs.

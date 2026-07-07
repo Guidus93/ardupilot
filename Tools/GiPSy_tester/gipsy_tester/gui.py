@@ -18,10 +18,15 @@ Production flow, driven entirely by the QR field at the top:
      ports) instead of probing the bootloader up front. See health.py
      for why probing early is counterproductive.
   4. Once connected, every poll (250ms) checks whether all 5 LEDs are
-     green; if so it's a PASS, if TEST_TIMEOUT_S elapses without that
-     (or the boot window itself times out) it's a FAIL. Either way the
-     result is appended to test_log.csv and the QR field clears for
-     the next unit.
+     green AND the IMU1/IMU2/Baro chip type names have arrived; if so
+     it's a PASS, if TEST_TIMEOUT_S elapses without that (or the boot
+     window itself times out) it's a FAIL. The type names need this
+     extra check because they depend on a PARAM_VALUE reply that can
+     lag behind the LEDs (which come from continuously-streamed sensor
+     messages) -- without it, a PASS could fire and disconnect before
+     that reply lands, leaving the type permanently blank in the
+     result. Either way the result is appended to test_log.csv and the
+     QR field clears for the next unit.
 
 The Scan/Connect buttons and port dropdown still work standalone for
 manual debugging outside the QR flow.
@@ -369,7 +374,16 @@ class GipsyTesterApp(tk.Tk):
             if self._test_deadline is None:
                 self._test_deadline = time.monotonic() + TEST_TIMEOUT_S
 
-            all_ok = snap.mavlink_ok and snap.imu1_ok and snap.imu2_ok and snap.baro_ok and snap.vbat_ok
+            # LEDs go green from continuously-streamed sensor messages (fast,
+            # ~1-2.5s), but the chip type names depend on a PARAM_VALUE reply
+            # that can take longer to land (or need a retry -- see health.py).
+            # Require the types too, or a PASS can fire and tear down the
+            # connection before that round trip finishes, leaving the type
+            # text permanently blank in the logged/displayed result.
+            all_ok = (
+                snap.mavlink_ok and snap.imu1_ok and snap.imu2_ok and snap.baro_ok and snap.vbat_ok
+                and snap.imu1_type and snap.imu2_type and snap.baro_type
+            )
             if all_ok:
                 self._finish_test(passed=True, snapshot=snap)
                 return

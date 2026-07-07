@@ -160,3 +160,29 @@
       connection that "drops" some params on the first request and
       confirmed the retry loop asks again only for the missing ones,
       not on every tick.
+
+## Done (cont. 9)
+- [x] The retry above helped but didn't fully fix it -- type still
+      sometimes never showed even with the retry in place. Found the
+      real bug: a race in `_poll_health`'s PASS condition
+      (`gui.py`), not (only) a MAVLink reliability issue. `all_ok` only
+      checked the 5 LED booleans, which come from continuously-streamed
+      sensor messages and go green fast (~1-2.5s). The chip type
+      strings depend on the slower `PARAM_VALUE` round trip (which
+      cont. 8's retry helps land eventually, but takes longer than the
+      LEDs). As soon as all 5 LEDs went green, `_finish_test` fired and
+      tore down the connection via `_stop_monitor()` -- often *before*
+      the type round trip finished, permanently blanking `imu1_type`/
+      `imu2_type`/`baro_type` in that result regardless of how good the
+      retry is, because the connection that would deliver the retry is
+      already closed.
+      Fix: `all_ok` now also requires `snap.imu1_type`/`imu2_type`/
+      `baro_type` to be non-empty, so a PASS can't fire until the types
+      have actually arrived (the disconnect/reconnect "fix" people
+      found manually was really just giving the type round trip enough
+      wall-clock time on a *fresh* connection to finish before anything
+      raced to disconnect it).
+      Unit-tested: (1) LEDs green + values shown but types still empty
+      -> test correctly keeps waiting, doesn't finish; (2) types then
+      arrive -> PASS fires and logs correctly; (3) types never arrive
+      within TEST_TIMEOUT_S -> FAILs cleanly instead of hanging.

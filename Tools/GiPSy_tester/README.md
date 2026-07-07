@@ -51,10 +51,13 @@ python run.py
 3. A valid scan automatically scans for the port and connects — no
    button presses (the port scan retries for a few seconds if the
    board doesn't show up on the very first attempt). It then waits
-   (same boot-window patience as before) for all 5 LEDs to go green.
-   - **All 5 green** within 8s of connecting -> **PASS**.
+   (same boot-window patience as before) for all 5 LEDs to go green
+   AND the IMU1/IMU2/Baro chip type names to arrive (the type text can
+   lag a little behind the LEDs, so both are required before a PASS).
+   - **All 5 green + all 3 chip types shown** within 8s of connecting
+     -> **PASS**.
    - Board never found, boot window times out, or 8s pass without all
-     5 LEDs green -> **FAIL**.
+     of the above -> **FAIL**.
    - Either way the full sensor snapshot (chip types, live values,
      voltage) is written as one row to `test_log.csv` next to the
      tool — re-scanning the same serial (e.g. re-testing after a fix)
