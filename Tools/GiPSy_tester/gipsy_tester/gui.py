@@ -73,12 +73,15 @@ class GipsyTesterApp(tk.Tk):
         leds.grid(row=1, column=0, sticky="ew", **pad)
 
         self._leds: dict[str, LedIndicator] = {}
-        for i, key in enumerate(("mavlink", "imu1", "imu2", "baro")):
+        self._vbat_var = tk.StringVar(value="--.-- V")
+        for i, key in enumerate(("mavlink", "imu1", "imu2", "baro", "vbat")):
             col = ttk.Frame(leds)
             col.grid(row=0, column=i, padx=14, pady=8)
             led = LedIndicator(col, key)
             led.pack()
             ttk.Label(col, text=key.upper()).pack()
+            if key == "vbat":
+                ttk.Label(col, textvariable=self._vbat_var).pack()
             self._leds[key] = led
 
         self._status_var = tk.StringVar(value="Not connected")
@@ -156,6 +159,7 @@ class GipsyTesterApp(tk.Tk):
     def _set_all_leds(self, state: bool | None) -> None:
         for led in self._leds.values():
             led.set_state(state)
+        self._vbat_var.set("--.-- V")
 
     def _poll_health(self) -> None:
         if self._monitor is None:
@@ -166,6 +170,8 @@ class GipsyTesterApp(tk.Tk):
         self._leds["imu1"].set_state(snap.imu1_ok)
         self._leds["imu2"].set_state(snap.imu2_ok)
         self._leds["baro"].set_state(snap.baro_ok)
+        self._leds["vbat"].set_state(snap.vbat_ok)
+        self._vbat_var.set(f"{snap.vbat_voltage:.2f} V" if snap.vbat_voltage is not None else "--.-- V")
 
         if snap.phase == "waiting":
             self._set_all_leds(None)

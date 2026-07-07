@@ -45,3 +45,12 @@
       run.bat launches via pythonw) over a PyInstaller .exe, because
       unsigned one-file exes get false-flagged by Defender/SmartScreen.
       Both tested: fresh setup works, run.bat guards a missing venv.
+- [x] Add VBAT test: reads `SYS_STATUS.voltage_battery` (mV,
+      `UINT16_MAX` sentinel = not sent), 5th LED + live voltage
+      readout, green when 12.8-13.5V and fresh (<2.5s, same staleness
+      window as the other LEDs). No extra stream request needed —
+      `SYS_STATUS` is in Rover's `EXT_STAT` group, 1Hz default.
+
+## Next (VBAT)
+- [ ] Test VBAT LED against a real board on bench power at a known
+      voltage to confirm the 12.8-13.5V range matches expectations

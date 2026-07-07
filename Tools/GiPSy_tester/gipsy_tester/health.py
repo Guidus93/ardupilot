@@ -47,6 +47,10 @@ BOOT_WAIT_S = 15.0
 # Per-attempt heartbeat wait; a miss just means "not booted yet, retry".
 HEARTBEAT_TIMEOUT_S = 2.0
 
+VBAT_MIN_V = 12.8
+VBAT_MAX_V = 13.5
+VBAT_NOT_SENT = 65535  # SYS_STATUS.voltage_battery UINT16_MAX sentinel
+
 
 @dataclass
 class HealthSnapshot:
@@ -58,6 +62,8 @@ class HealthSnapshot:
     imu1_ok: bool = False
     imu2_ok: bool = False
     baro_ok: bool = False
+    vbat_ok: bool = False
+    vbat_voltage: float | None = None
     autopilot_type: str = ""
     system_id: int | None = None
     last_error: str = ""
@@ -69,6 +75,7 @@ class _LastSeen:
     raw_imu: float = 0.0
     scaled_imu2: float = 0.0
     scaled_pressure: float = 0.0
+    sys_status: float = 0.0
 
 
 def _is_plausible(*values: float) -> bool:
@@ -216,6 +223,11 @@ class MavlinkHealthMonitor:
         elif msg_type == "SCALED_PRESSURE":
             if _is_plausible(msg.press_abs) and msg.press_abs > 0:
                 self._seen.scaled_pressure = now
+        elif msg_type == "SYS_STATUS":
+            if msg.voltage_battery != VBAT_NOT_SENT:
+                self._seen.sys_status = now
+                with self._lock:
+                    self._snapshot.vbat_voltage = msg.voltage_battery / 1000.0
 
     def _update_snapshot(self, now: float) -> None:
         with self._lock:
@@ -223,3 +235,10 @@ class MavlinkHealthMonitor:
             self._snapshot.imu1_ok = (now - self._seen.raw_imu) < STALE_AFTER_S
             self._snapshot.imu2_ok = (now - self._seen.scaled_imu2) < STALE_AFTER_S
             self._snapshot.baro_ok = (now - self._seen.scaled_pressure) < STALE_AFTER_S
+
+            vbat_fresh = (now - self._seen.sys_status) < STALE_AFTER_S
+            self._snapshot.vbat_ok = (
+                vbat_fresh
+                and self._snapshot.vbat_voltage is not None
+                and VBAT_MIN_V <= self._snapshot.vbat_voltage <= VBAT_MAX_V
+            )

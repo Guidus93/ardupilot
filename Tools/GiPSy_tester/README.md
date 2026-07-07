@@ -3,7 +3,7 @@
 Small desktop tool to check a freshly flashed GiPSy / GiPSy-mini /
 PatrionicPH7X board over USB before it leaves the bench: connects
 over the virtual COM port, detects bootloader-vs-app mode, and shows
-4 status LEDs (MAVLink heartbeat, IMU1, IMU2, Baro).
+5 status LEDs (MAVLink heartbeat, IMU1, IMU2, Baro, VBAT).
 
 ## Setup and run (Windows, no command line needed)
 
@@ -46,9 +46,12 @@ python run.py
      unplug the board during the countdown**.
    - It also re-scans ports while waiting, because the USB COM number
      can change when the board jumps from bootloader to application.
-   - Once a heartbeat arrives, the four LEDs turn green as HEARTBEAT /
-     RAW_IMU / SCALED_IMU2 / SCALED_PRESSURE messages arrive, and stay
-     green as long as they keep arriving within ~2.5s.
+   - Once a heartbeat arrives, the LEDs turn green as HEARTBEAT /
+     RAW_IMU / SCALED_IMU2 / SCALED_PRESSURE / SYS_STATUS messages
+     arrive, and stay green as long as they keep arriving within ~2.5s.
+   - The VBAT LED also shows the live battery voltage underneath it
+     and only goes green when the reading is fresh **and** between
+     12.8V and 13.5V.
    - Only if the whole ~15s window passes with no MAVLink does the tool
      probe the bootloader once and tell you either to flash firmware
      (still in bootloader) or to check firmware/power (no response).
