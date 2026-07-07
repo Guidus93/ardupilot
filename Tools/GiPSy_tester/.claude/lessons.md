@@ -42,3 +42,26 @@ booting on its own.
 Practical effect: the operator just plugs in and clicks Connect. The UI
 shows a "waiting for board to boot (Ns left)" countdown so they don't
 panic and start yanking cables during the normal boot delay.
+
+## setup.bat: a stale `py` launcher can shadow a working `python`
+
+Seen on a factory PC with Python 3.14.6: `setup.bat` failed with
+`did not find executable at 'C:\Python.exe'` even though `python
+--version` worked fine directly. Cause: the `py` launcher was
+registered on PATH from some earlier/removed Python install and
+pointed at a path that no longer existed. `setup.bat` only checked
+`where py` (does the command exist), not whether it actually runs --
+so it always picked the broken `py -3` first and never fell back to
+the working `python`.
+
+Fix: check with `py -3 --version` (actually runs it) instead of
+`where py` (only checks PATH). Also added a self-heal: if `.venv`
+already exists but its `python.exe` doesn't run (e.g. created earlier
+by the broken launcher, which can bake a bad interpreter path into
+the venv via `__PYVENV_LAUNCHER__`), wipe and recreate it rather than
+limping along on a broken venv forever.
+
+Practical effect: if `setup.bat` ever fails again with "did not find
+executable", the fix is almost always a stale/broken `py` launcher
+registration on that machine, not a problem with this tool's
+dependencies -- `python --version` working directly is the tell.

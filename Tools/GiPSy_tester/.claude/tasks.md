@@ -99,3 +99,16 @@
       the entry reliably, confirm TEST_TIMEOUT_S (8s) is comfortably
       long enough once boot has actually completed (it's separate from
       the 15s BOOT_WAIT_S), and sanity-check the CSV in Excel.
+
+## Done (cont. 6)
+- [x] Fixed `setup.bat` failing on a factory PC (Python 3.14.6) with
+      `did not find executable at 'C:\Python.exe'`. Cause: a stale `py`
+      launcher registration pointed at a nonexistent path; `setup.bat`
+      only checked `where py` (exists on PATH) not whether it actually
+      runs, so it never fell back to the working plain `python`. Now
+      checks with `py -3 --version` instead, and self-heals an
+      existing `.venv` whose `python.exe` doesn't run (e.g. created
+      earlier by the broken launcher) by wiping and recreating it. See
+      lessons.md. Confirmed pymavlink/pyserial/lxml/future all import
+      cleanly on Python 3.14 once the interpreter itself is right --
+      this was a launcher issue, not a dependency compatibility issue.

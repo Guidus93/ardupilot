@@ -5,15 +5,20 @@ setlocal
 cd /d "%~dp0"
 
 REM Prefer the py launcher (ships with python.org installers), fall
-REM back to python on PATH.
+REM back to python on PATH. Being on PATH isn't enough to trust it --
+REM some machines have a stale `py` registration left over from a
+REM removed/reinstalled Python that resolves to a path that no longer
+REM exists (seen as "did not find executable at 'C:\Python.exe'"), so
+REM actually run --version rather than just `where`-checking it.
 REM Note: use `if errorlevel` (runtime) not `if %errorlevel%==0`: the
 REM latter is expanded when the whole if/else block is parsed, so a
-REM nested check would see the previous command's result, not `where`'s.
-where py >nul 2>nul
+REM nested check would see the previous command's result, not the
+REM version check's.
+py -3 --version >nul 2>nul
 if not errorlevel 1 (
     set "PY=py -3"
 ) else (
-    where python >nul 2>nul
+    python --version >nul 2>nul
     if not errorlevel 1 (
         set "PY=python"
     ) else (
@@ -24,6 +29,17 @@ if not errorlevel 1 (
         echo.
         pause
         exit /b 1
+    )
+)
+
+REM If a previous run created .venv with a broken interpreter (e.g. the
+REM stale `py` launcher above), python.exe exists on disk but won't
+REM actually run -- wipe and recreate rather than limping along on it.
+if exist ".venv\Scripts\python.exe" (
+    ".venv\Scripts\python.exe" --version >nul 2>nul
+    if errorlevel 1 (
+        echo Existing .venv looks broken, recreating it ...
+        rmdir /s /q ".venv"
     )
 )
 
