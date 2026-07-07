@@ -71,3 +71,31 @@
 - [x] Verified on a real board: INS_ACC_ID/INS_ACC2_ID/BARO1_DEVID
       round-trip via PARAM_REQUEST_READ/PARAM_VALUE and the devtype
       decode shows correctly in the GUI.
+
+## Done (cont. 5)
+- [x] QR-code-driven production flow + CSV logging. Added
+      `qrcode_parse.py` (parses `PRODUCT_WWYY_SERIAL`, e.g.
+      `EV0004_2426_0092`) and `test_log.py` (writes `test_log.csv` next
+      to the tool, one row per serial -- re-scanning the same serial
+      overwrites its row rather than appending a duplicate). The GUI's
+      QR entry is always focused; a keyboard-wedge scanner just types
+      the code + Enter into it. A valid scan triggers Scan+Connect
+      automatically (no button presses), then every poll checks
+      whether all 5 LEDs are green -- PASS if so, FAIL if
+      TEST_TIMEOUT_S (8s) elapses first or the board never shows up /
+      the boot window itself times out. Either way the full snapshot
+      (all sensor types + values) is logged and the QR field
+      re-enables after a 3s PASS/FAIL banner. Manual Scan/Connect
+      buttons still work standalone for debugging; a QR scan against
+      an already-connected board rides along on that connection
+      instead of erroring. Unit-tested (QR parsing, CSV
+      append/overwrite, and the full GUI flow with a fake monitor for
+      both PASS and no-board-found FAIL) -- not yet tested against a
+      real board end-to-end.
+
+## Next (QR/CSV)
+- [ ] Test the full QR-to-CSV flow on the bench with a real scanner
+      and a real board: confirm the scanner's Enter keystroke reaches
+      the entry reliably, confirm TEST_TIMEOUT_S (8s) is comfortably
+      long enough once boot has actually completed (it's separate from
+      the 15s BOOT_WAIT_S), and sanity-check the CSV in Excel.

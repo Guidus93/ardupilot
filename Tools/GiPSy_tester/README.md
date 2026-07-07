@@ -3,7 +3,10 @@
 Small desktop tool to check a freshly flashed GiPSy / GiPSy-mini /
 PatrionicPH7X board over USB before it leaves the bench: connects
 over the virtual COM port, detects bootloader-vs-app mode, and shows
-5 status LEDs (MAVLink heartbeat, IMU1, IMU2, Baro, VBAT).
+5 status LEDs (MAVLink heartbeat, IMU1, IMU2, Baro, VBAT). Production
+use is QR-driven: scan a unit's QR code and the tool connects, tests,
+shows PASS/FAIL, and logs the result to a CSV -- see "Production
+testing with a QR scanner" below.
 
 ## Setup and run (Windows, no command line needed)
 
@@ -28,7 +31,38 @@ pip install -r requirements.txt
 python run.py
 ```
 
-## Using the tool
+## Production testing with a QR scanner
+
+1. Plug in the board over USB.
+2. Click into the **Scan QR code** field (it's focused automatically
+   on startup and after every test). Scan the unit's QR code with a
+   USB keyboard-wedge scanner — it types the code followed by Enter,
+   same as a keyboard, no drivers or extra hardware needed.
+   - Expected format: `PRODUCT_WWYY_SERIAL`, e.g. `EV0004_2426_0092`
+     is product `EV0004`, week 24 of year 2026, serial `0092`. An
+     unrecognized format is rejected with an on-screen error and
+     nothing is logged.
+3. A valid scan automatically scans for the port and connects — no
+   button presses. It then waits (same boot-window patience as
+   before) for all 5 LEDs to go green.
+   - **All 5 green** within 8s of connecting -> **PASS**.
+   - Board never found, boot window times out, or 8s pass without all
+     5 LEDs green -> **FAIL**.
+   - Either way the full sensor snapshot (chip types, live values,
+     voltage) is written as one row to `test_log.csv` next to the
+     tool — re-scanning the same serial (e.g. re-testing after a fix)
+     overwrites its row rather than adding a duplicate.
+4. The PASS/FAIL result is shown for 3 seconds, then the QR field
+   clears and refocuses automatically — scan the next unit right away.
+
+## Manual controls (for debugging)
+
+The Port dropdown, **Scan**, and **Connect** buttons below the QR
+field work independently for troubleshooting a single board without
+going through the QR flow. Scanning a QR while already connected this
+way just attaches the pass/fail test to that existing connection
+instead of erroring.
+
 1. Plug in the board over USB.
 2. Click **Scan**. The tool auto-selects the port matching ArduPilot's
    USB VID:PID `1209:5741`, so you don't need to know the COM number.
