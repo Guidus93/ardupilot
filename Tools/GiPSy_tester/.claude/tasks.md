@@ -67,8 +67,7 @@
       streaming) under IMU1/IMU2, and chip name + live pressure (hPa,
       from SCALED_PRESSURE) under Baro.
 
-## Next (IMU/baro detail)
-- [ ] Test devtype decode and the PARAM_REQUEST_READ round trip
-      against a real board -- verify INS_ACC_ID/INS_ACC2_ID/
-      BARO1_DEVID actually arrive as PARAM_VALUE and decode to the
-      chips on the hwdef (ICM42605 x2, DPS310 for GiPSy-mini).
+## Done (cont. 4)
+- [x] Verified on a real board: INS_ACC_ID/INS_ACC2_ID/BARO1_DEVID
+      round-trip via PARAM_REQUEST_READ/PARAM_VALUE and the devtype
+      decode shows correctly in the GUI.
