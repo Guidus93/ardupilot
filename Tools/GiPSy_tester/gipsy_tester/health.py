@@ -51,6 +51,43 @@ VBAT_MIN_V = 12.8
 VBAT_MAX_V = 13.5
 VBAT_NOT_SENT = 65535  # SYS_STATUS.voltage_battery UINT16_MAX sentinel
 
+# RAW_IMU/SCALED_IMU2 accel fields are in mG (1000 == 1 standard gravity) --
+# see send_raw_imu()/send_scaled_imu() in libraries/GCS_MAVLink/GCS_Common.cpp.
+GRAVITY_MSS = 9.80665
+
+# devtype -> chip name, read off INS_ACC_ID / INS_ACC2_ID / BARO1_DEVID param
+# values (bus_type:3, bus:5, address:8, devtype:8 packed into the low 24 bits
+# -- see libraries/AP_HAL/Device.h DeviceStructure). Mirrors the tables in
+# Tools/scripts/decode_devid.py; duplicated (not imported) so this tool stays
+# usable outside a full ArduPilot checkout.
+_INS_DEVTYPES = {
+    0x09: "BMI160", 0x10: "L3G4200D", 0x11: "LSM303D", 0x12: "BMA180",
+    0x13: "MPU6000", 0x16: "MPU9250", 0x17: "IIS328DQ", 0x21: "MPU6000",
+    0x22: "L3GD20", 0x24: "MPU9250", 0x25: "I3G4250D", 0x26: "LSM9DS1",
+    0x27: "ICM20789", 0x28: "ICM20689", 0x29: "BMI055", 0x2A: "SITL",
+    0x2B: "BMI088", 0x2C: "ICM20948", 0x2D: "ICM20648", 0x2E: "ICM20649",
+    0x2F: "ICM20602", 0x30: "ICM20601", 0x31: "ADIS1647x", 0x32: "SERIAL",
+    0x33: "ICM40609", 0x34: "ICM42688", 0x35: "ICM42605", 0x36: "ICM40605",
+    0x37: "IIM42652", 0x38: "BMI270", 0x39: "BMI085", 0x3A: "ICM42670",
+    0x3B: "ICM45686",
+}
+_BARO_DEVTYPES = {
+    0x01: "SITL", 0x02: "BMP085", 0x03: "BMP280", 0x04: "BMP388",
+    0x05: "DPS280", 0x06: "DPS310", 0x07: "FBM320", 0x08: "ICM20789",
+    0x09: "KELLERLD", 0x0A: "LPS2XH", 0x0B: "MS5611", 0x0C: "SPL06",
+    0x0D: "DroneCAN", 0x0E: "MSP", 0x0F: "ICP101XX", 0x10: "ICP201XX",
+    0x11: "MS5607", 0x12: "MS5837", 0x13: "MS5637", 0x14: "BMP390",
+    0x15: "BMP581",
+}
+
+# Params carrying each sensor's device ID; requested once right after
+# connecting so the type name can be shown alongside the liveness LEDs.
+_DEVID_PARAMS = {
+    "INS_ACC_ID": ("imu1_type", _INS_DEVTYPES),
+    "INS_ACC2_ID": ("imu2_type", _INS_DEVTYPES),
+    "BARO1_DEVID": ("baro_type", _BARO_DEVTYPES),
+}
+
 
 @dataclass
 class HealthSnapshot:
@@ -64,6 +101,12 @@ class HealthSnapshot:
     baro_ok: bool = False
     vbat_ok: bool = False
     vbat_voltage: float | None = None
+    imu1_type: str = ""
+    imu1_accel_mag: float | None = None
+    imu2_type: str = ""
+    imu2_accel_mag: float | None = None
+    baro_type: str = ""
+    baro_pressure: float | None = None
     autopilot_type: str = ""
     system_id: int | None = None
     last_error: str = ""
@@ -80,6 +123,15 @@ class _LastSeen:
 
 def _is_plausible(*values: float) -> bool:
     return all(v == v and math.isfinite(v) for v in values)  # v == v rejects NaN
+
+
+def _accel_magnitude(x: float, y: float, z: float) -> float:
+    return math.sqrt(x * x + y * y + z * z) * GRAVITY_MSS / 1000.0
+
+
+def _decode_devtype(dev_id: int, table: dict[int, str]) -> str:
+    devtype = (dev_id >> 16) & 0xFF
+    return table.get(devtype, f"unknown(0x{devtype:02x})")
 
 
 class MavlinkHealthMonitor:
@@ -186,6 +238,8 @@ class MavlinkHealthMonitor:
             self._snapshot.autopilot_type = mavutil.mavlink.enums["MAV_AUTOPILOT"].get(
                 hb.autopilot, mavutil.mavlink.enums["MAV_AUTOPILOT"][0]
             ).name
+        for param_name in _DEVID_PARAMS:
+            conn.param_fetch_one(param_name)
         return conn
 
     def _diagnose_no_heartbeat(self) -> None:
@@ -217,17 +271,30 @@ class MavlinkHealthMonitor:
         elif msg_type == "RAW_IMU":
             if _is_plausible(msg.xacc, msg.yacc, msg.zacc):
                 self._seen.raw_imu = now
+                with self._lock:
+                    self._snapshot.imu1_accel_mag = _accel_magnitude(msg.xacc, msg.yacc, msg.zacc)
         elif msg_type == "SCALED_IMU2":
             if _is_plausible(msg.xacc, msg.yacc, msg.zacc):
                 self._seen.scaled_imu2 = now
+                with self._lock:
+                    self._snapshot.imu2_accel_mag = _accel_magnitude(msg.xacc, msg.yacc, msg.zacc)
         elif msg_type == "SCALED_PRESSURE":
             if _is_plausible(msg.press_abs) and msg.press_abs > 0:
                 self._seen.scaled_pressure = now
+                with self._lock:
+                    self._snapshot.baro_pressure = msg.press_abs
         elif msg_type == "SYS_STATUS":
             if msg.voltage_battery != VBAT_NOT_SENT:
                 self._seen.sys_status = now
                 with self._lock:
                     self._snapshot.vbat_voltage = msg.voltage_battery / 1000.0
+        elif msg_type == "PARAM_VALUE":
+            field = _DEVID_PARAMS.get(msg.param_id)
+            if field is not None:
+                attr, table = field
+                dev_id = int(msg.param_value)
+                with self._lock:
+                    setattr(self._snapshot, attr, _decode_devtype(dev_id, table) if dev_id else "none")
 
     def _update_snapshot(self, now: float) -> None:
         with self._lock:

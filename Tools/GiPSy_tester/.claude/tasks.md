@@ -54,3 +54,21 @@
 ## Next (VBAT)
 - [ ] Test VBAT LED against a real board on bench power at a known
       voltage to confirm the 12.8-13.5V range matches expectations
+
+## Done (cont. 3)
+- [x] Add IMU/baro chip type + live value display. Fetches
+      `INS_ACC_ID`/`INS_ACC2_ID`/`BARO1_DEVID` once via
+      `PARAM_REQUEST_READ` right after connecting, decodes the
+      devtype byte packed into the device ID (bus_type:3, bus:5,
+      address:8, devtype:8 -- see `libraries/AP_HAL/Device.h`
+      DeviceStructure) using tables mirrored from
+      `Tools/scripts/decode_devid.py`. Shows chip name + live
+      accelerometer magnitude (m/s², from RAW_IMU/SCALED_IMU2, already
+      streaming) under IMU1/IMU2, and chip name + live pressure (hPa,
+      from SCALED_PRESSURE) under Baro.
+
+## Next (IMU/baro detail)
+- [ ] Test devtype decode and the PARAM_REQUEST_READ round trip
+      against a real board -- verify INS_ACC_ID/INS_ACC2_ID/
+      BARO1_DEVID actually arrive as PARAM_VALUE and decode to the
+      chips on the hwdef (ICM42605 x2, DPS310 for GiPSy-mini).

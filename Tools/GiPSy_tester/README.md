@@ -49,6 +49,11 @@ python run.py
    - Once a heartbeat arrives, the LEDs turn green as HEARTBEAT /
      RAW_IMU / SCALED_IMU2 / SCALED_PRESSURE / SYS_STATUS messages
      arrive, and stay green as long as they keep arriving within ~2.5s.
+   - The IMU1/IMU2 LEDs show the detected chip (from `INS_ACC_ID` /
+     `INS_ACC2_ID`, fetched once via `PARAM_REQUEST_READ` right after
+     connecting) and the live accelerometer magnitude in m/s² — near
+     9.8 m/s² at rest, regardless of orientation. The Baro LED shows
+     its chip (`BARO1_DEVID`) and live absolute pressure in hPa.
    - The VBAT LED also shows the live battery voltage underneath it
      and only goes green when the reading is fresh **and** between
      12.8V and 13.5V.

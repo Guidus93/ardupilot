@@ -1,4 +1,4 @@
-"""Tkinter GUI: pick a port, connect, watch 4 status LEDs.
+"""Tkinter GUI: pick a port, connect, watch 5 status LEDs.
 
 Flow:
   1. Scan -> list candidate ports (VID:PID / description match).
@@ -73,15 +73,23 @@ class GipsyTesterApp(tk.Tk):
         leds.grid(row=1, column=0, sticky="ew", **pad)
 
         self._leds: dict[str, LedIndicator] = {}
-        self._vbat_var = tk.StringVar(value="--.-- V")
+        self._detail_vars: dict[str, tk.StringVar] = {}
+        detail_defaults = {
+            "imu1": "-- --.--m/s²",
+            "imu2": "-- --.--m/s²",
+            "baro": "-- --.--hPa",
+            "vbat": "--.-- V",
+        }
         for i, key in enumerate(("mavlink", "imu1", "imu2", "baro", "vbat")):
             col = ttk.Frame(leds)
             col.grid(row=0, column=i, padx=14, pady=8)
             led = LedIndicator(col, key)
             led.pack()
             ttk.Label(col, text=key.upper()).pack()
-            if key == "vbat":
-                ttk.Label(col, textvariable=self._vbat_var).pack()
+            if key in detail_defaults:
+                var = tk.StringVar(value=detail_defaults[key])
+                ttk.Label(col, textvariable=var).pack()
+                self._detail_vars[key] = var
             self._leds[key] = led
 
         self._status_var = tk.StringVar(value="Not connected")
@@ -159,7 +167,10 @@ class GipsyTesterApp(tk.Tk):
     def _set_all_leds(self, state: bool | None) -> None:
         for led in self._leds.values():
             led.set_state(state)
-        self._vbat_var.set("--.-- V")
+        self._detail_vars["imu1"].set("-- --.--m/s²")
+        self._detail_vars["imu2"].set("-- --.--m/s²")
+        self._detail_vars["baro"].set("-- --.--hPa")
+        self._detail_vars["vbat"].set("--.-- V")
 
     def _poll_health(self) -> None:
         if self._monitor is None:
@@ -171,7 +182,17 @@ class GipsyTesterApp(tk.Tk):
         self._leds["imu2"].set_state(snap.imu2_ok)
         self._leds["baro"].set_state(snap.baro_ok)
         self._leds["vbat"].set_state(snap.vbat_ok)
-        self._vbat_var.set(f"{snap.vbat_voltage:.2f} V" if snap.vbat_voltage is not None else "--.-- V")
+
+        self._detail_vars["imu1"].set(self._format_imu(snap.imu1_type, snap.imu1_accel_mag))
+        self._detail_vars["imu2"].set(self._format_imu(snap.imu2_type, snap.imu2_accel_mag))
+        self._detail_vars["baro"].set(
+            f"{snap.baro_type or '--'} {snap.baro_pressure:.1f}hPa"
+            if snap.baro_pressure is not None
+            else "-- --.--hPa"
+        )
+        self._detail_vars["vbat"].set(
+            f"{snap.vbat_voltage:.2f} V" if snap.vbat_voltage is not None else "--.-- V"
+        )
 
         if snap.phase == "waiting":
             self._set_all_leds(None)
@@ -192,6 +213,12 @@ class GipsyTesterApp(tk.Tk):
             self._status_var.set("Waiting for MAVLink heartbeat...")
 
         self.after(POLL_MS, self._poll_health)
+
+    @staticmethod
+    def _format_imu(type_name: str, accel_mag: float | None) -> str:
+        if accel_mag is None:
+            return "-- --.--m/s²"
+        return f"{type_name or '--'} {accel_mag:.2f}m/s²"
 
     def destroy(self) -> None:
         if self._monitor is not None:
