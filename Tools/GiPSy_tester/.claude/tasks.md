@@ -95,8 +95,7 @@
 
 ## Next (QR/CSV)
 - [ ] Test the full QR-to-CSV flow on the bench with a real scanner
-      and a real board: confirm the scanner's Enter keystroke reaches
-      the entry reliably, confirm TEST_TIMEOUT_S (8s) is comfortably
+      and a real board: confirm TEST_TIMEOUT_S (8s) is comfortably
       long enough once boot has actually completed (it's separate from
       the 15s BOOT_WAIT_S), and sanity-check the CSV in Excel.
 
@@ -112,3 +111,31 @@
       lessons.md. Confirmed pymavlink/pyserial/lxml/future all import
       cleanly on Python 3.14 once the interpreter itself is right --
       this was a launcher issue, not a dependency compatibility issue.
+
+## Done (cont. 7)
+- [x] Fixed two factory-floor QR papercuts, both from the PC's Windows
+      input language being set to Chinese instead of English:
+      (1) the scanner's trailing Enter keystroke sometimes got eaten by
+      IME composition instead of reaching the entry, so `_on_qr_scanned`
+      never fired -- fixed with an idle-debounce auto-submit
+      (`QR_IDLE_SUBMIT_MS`, 400ms of no new keystrokes triggers submit
+      on its own, Enter is now a nice-to-have not a requirement); (2) an
+      IME can also emit full-width characters (e.g. `ａ` instead of
+      `a`, full-width `＿` for `_`) which broke the QR regex outright --
+      fixed in `qrcode_parse.parse_qr` with `unicodedata.normalize
+      NFKC`, which folds full-width ASCII back to plain ASCII before
+      matching (and the stored `raw` is the normalized form too, so
+      logs/display show clean ASCII).
+      Also fixed the separate "still need to press Scan manually"
+      report: `port_scan.find_candidate_ports()` (backed by
+      `serial.tools.list_ports.comports()`) can return a stale/empty
+      result on the very first call right after a QR scan even with
+      the board already plugged in and enumerated -- a manual re-click
+      moments later always found it, which pointed at a one-shot-scan
+      timing issue rather than a real detection failure. Added
+      `_scan_for_qr_retry`, which retries every
+      `QR_SCAN_RETRY_INTERVAL_MS` (300ms) for up to `QR_SCAN_RETRY_S`
+      (3s) before giving up and logging a FAIL.
+      Unit-tested: fullwidth-IME QR parsing, idle-submit firing without
+      Enter, and scan-retry recovering from a scripted flaky
+      `find_candidate_ports` (fails N times then succeeds).

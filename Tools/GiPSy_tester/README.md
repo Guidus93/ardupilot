@@ -37,14 +37,21 @@ python run.py
 2. Click into the **Scan QR code** field (it's focused automatically
    on startup and after every test). Scan the unit's QR code with a
    USB keyboard-wedge scanner — it types the code followed by Enter,
-   same as a keyboard, no drivers or extra hardware needed.
+   same as a keyboard, no drivers or extra hardware needed. If the
+   scanner's Enter keystroke doesn't reach the field (can happen when
+   Windows' input language is set to something other than English —
+   an IME can swallow it), the tool submits on its own once typing
+   stops for ~0.4s, so you don't need to click into the box and press
+   Enter yourself. Full-width characters from an IME (e.g. `ａ` for
+   `a`) are also normalized automatically, so the code still parses.
    - Expected format: `PRODUCT_WWYY_SERIAL`, e.g. `EV0004_2426_0092`
      is product `EV0004`, week 24 of year 2026, serial `0092`. An
      unrecognized format is rejected with an on-screen error and
      nothing is logged.
 3. A valid scan automatically scans for the port and connects — no
-   button presses. It then waits (same boot-window patience as
-   before) for all 5 LEDs to go green.
+   button presses (the port scan retries for a few seconds if the
+   board doesn't show up on the very first attempt). It then waits
+   (same boot-window patience as before) for all 5 LEDs to go green.
    - **All 5 green** within 8s of connecting -> **PASS**.
    - Board never found, boot window times out, or 8s pass without all
      5 LEDs green -> **FAIL**.

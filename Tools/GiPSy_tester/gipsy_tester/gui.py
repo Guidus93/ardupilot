@@ -1,10 +1,18 @@
 """Tkinter GUI: scan a QR code, watch 5 status LEDs, get PASS/FAIL.
 
 Production flow, driven entirely by the QR field at the top:
-  1. Operator scans the unit's QR code (a keyboard-wedge scanner just
-     types the code + Enter into the always-focused QR entry).
-  2. A valid scan (PRODUCT_WWYY_SERIAL, see qrcode_parse.py) triggers a
-     port scan and connect automatically -- no button presses needed.
+  1. Operator scans the unit's QR code (a keyboard-wedge scanner types
+     the code + Enter into the always-focused QR entry). If the
+     scanner's Enter keystroke doesn't register -- seen when Windows'
+     input language isn't English and IME composition eats it -- the
+     field auto-submits once it goes quiet for QR_IDLE_SUBMIT_MS
+     anyway, so Enter is a nice-to-have, not a hard requirement.
+  2. A valid scan (PRODUCT_WWYY_SERIAL, see qrcode_parse.py; NFKC-
+     normalized there too, so full-width IME characters still parse)
+     triggers a port scan and connect automatically -- no button
+     presses needed. The scan is retried for QR_SCAN_RETRY_S because
+     comports() can return a stale/empty result on the very first call
+     right after a scan even with the board already plugged in.
   3. Connect hands the port to a MavlinkHealthMonitor, which waits out
      the bootloader boot window (retrying a heartbeat, re-scanning
      ports) instead of probing the bootloader up front. See health.py
@@ -46,6 +54,20 @@ TEST_TIMEOUT_S = 8.0
 # the next scan.
 RESULT_DISPLAY_MS = 3000
 
+# A scanner's trailing Enter keystroke can be swallowed by IME
+# composition when Windows' input language isn't English, so typing
+# into the QR field auto-submits once it goes quiet for this long
+# instead of strictly requiring <Return> to fire.
+QR_IDLE_SUBMIT_MS = 400
+
+# Auto-retry window for the QR-triggered port scan: comports() can
+# occasionally return stale/empty results on the very first call right
+# after a scan even though the board has been plugged in and
+# enumerated for a while (a manual re-click of Scan a moment later
+# always finds it) -- so retry instead of failing on one empty scan.
+QR_SCAN_RETRY_S = 3.0
+QR_SCAN_RETRY_INTERVAL_MS = 300
+
 
 class LedIndicator(tk.Canvas):
     def __init__(self, master, label_text: str, size: int = 22):
@@ -76,6 +98,10 @@ class GipsyTesterApp(tk.Tk):
         # connects; None until connected, since the boot-wait phase already
         # has its own timeout in health.py.
         self._test_deadline: float | None = None
+        # Monotonic deadline for _scan_for_qr_retry to keep retrying the
+        # port scan right after a QR scan; set fresh each time in
+        # _on_qr_scanned.
+        self._scan_for_qr_deadline: float = 0.0
 
         self._build_widgets()
         self._on_scan()
@@ -91,6 +117,8 @@ class GipsyTesterApp(tk.Tk):
         self._qr_entry = ttk.Entry(qr_frame, textvariable=self._qr_var, width=30, font=("", 11))
         self._qr_entry.grid(row=0, column=1, padx=4)
         self._qr_entry.bind("<Return>", self._on_qr_scanned)
+        self._qr_entry.bind("<KeyRelease>", self._on_qr_key_release)
+        self._qr_idle_after_id: str | None = None
 
         self._result_var = tk.StringVar(value="")
         self._result_label = tk.Label(qr_frame, textvariable=self._result_var, font=("", 14, "bold"))
@@ -141,7 +169,25 @@ class GipsyTesterApp(tk.Tk):
             row=3, column=0, sticky="ew", **pad
         )
 
+    def _on_qr_key_release(self, _event=None) -> None:
+        # Backstop for a scanner's trailing Enter keystroke getting eaten
+        # by IME composition (seen with the PC's input language set to
+        # Chinese): if the field goes quiet for QR_IDLE_SUBMIT_MS, submit
+        # it ourselves instead of waiting for <Return> to ever fire.
+        if self._qr_idle_after_id is not None:
+            self.after_cancel(self._qr_idle_after_id)
+        self._qr_idle_after_id = self.after(QR_IDLE_SUBMIT_MS, self._on_qr_idle_timeout)
+
+    def _on_qr_idle_timeout(self) -> None:
+        self._qr_idle_after_id = None
+        if self._qr_var.get().strip():
+            self._on_qr_scanned()
+
     def _on_qr_scanned(self, _event=None) -> None:
+        if self._qr_idle_after_id is not None:
+            self.after_cancel(self._qr_idle_after_id)
+            self._qr_idle_after_id = None
+
         raw = self._qr_var.get().strip()
         self._qr_var.set("")
         if not raw:
@@ -163,13 +209,27 @@ class GipsyTesterApp(tk.Tk):
         self._qr_entry.config(state="disabled")
         self._status_var.set(f"Scanned {qr.raw} -- looking for the board...")
 
+        self._scan_for_qr_deadline = time.monotonic() + QR_SCAN_RETRY_S
+        self._scan_for_qr_retry()
+
+    def _scan_for_qr_retry(self) -> None:
+        # comports() can return a stale/empty result on the very first
+        # call right after a scan even with the board already plugged in
+        # and enumerated (a manual re-click of Scan a moment later always
+        # finds it) -- so retry for a few seconds instead of failing on
+        # one empty scan.
         self._on_scan()
-        if self._monitor is None:
-            # No board found at all: fail immediately rather than waiting
-            # out the full boot window for a port that was never there.
-            self._status_var.set(f"Scanned {qr.raw}, but no ArduPilot port found")
-            self._finish_test(passed=False)
+        if self._monitor is not None:
             return
+
+        if time.monotonic() < self._scan_for_qr_deadline:
+            self.after(QR_SCAN_RETRY_INTERVAL_MS, self._scan_for_qr_retry)
+            return
+
+        qr = self._current_qr
+        assert qr is not None
+        self._status_var.set(f"Scanned {qr.raw}, but no ArduPilot port found")
+        self._finish_test(passed=False)
 
     def _on_scan(self) -> None:
         # Don't yank a live connection out from under the user on a rescan.
@@ -356,6 +416,8 @@ class GipsyTesterApp(tk.Tk):
         return f"{type_name or '--'} {accel_mag:.2f}m/s²"
 
     def destroy(self) -> None:
+        if self._qr_idle_after_id is not None:
+            self.after_cancel(self._qr_idle_after_id)
         self._stop_monitor()
         super().destroy()
 
