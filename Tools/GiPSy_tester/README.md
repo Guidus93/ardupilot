@@ -91,10 +91,15 @@ instead of erroring.
      RAW_IMU / SCALED_IMU2 / SCALED_PRESSURE / SYS_STATUS messages
      arrive, and stay green as long as they keep arriving within ~2.5s.
    - The IMU1/IMU2 LEDs show the detected chip (from `INS_ACC_ID` /
-     `INS_ACC2_ID`, fetched once via `PARAM_REQUEST_READ` right after
-     connecting) and the live accelerometer magnitude in m/s² — near
-     9.8 m/s² at rest, regardless of orientation. The Baro LED shows
-     its chip (`BARO1_DEVID`) and live absolute pressure in hPa.
+     `INS_ACC2_ID`, fetched via `PARAM_REQUEST_READ` right after
+     connecting and re-requested every ~1.5s until it arrives, since
+     that request has no delivery guarantee) and the live accelerometer
+     magnitude in m/s² — near 9.8 m/s² at rest, regardless of
+     orientation. The Baro LED shows its chip (`BARO1_DEVID`, same
+     retry) and live absolute pressure in hPa. The LED and the live
+     value don't depend on this at all (they come from the sensor's own
+     streamed messages), so they can be green well before the chip name
+     text appears — that's normal, not a fault.
    - The VBAT LED also shows the live battery voltage underneath it
      and only goes green when the reading is fresh **and** between
      12.8V and 13.5V.

@@ -80,13 +80,21 @@ _BARO_DEVTYPES = {
     0x15: "BMP581",
 }
 
-# Params carrying each sensor's device ID; requested once right after
+# Params carrying each sensor's device ID; fetched once right after
 # connecting so the type name can be shown alongside the liveness LEDs.
 _DEVID_PARAMS = {
     "INS_ACC_ID": ("imu1_type", _INS_DEVTYPES),
     "INS_ACC2_ID": ("imu2_type", _INS_DEVTYPES),
     "BARO1_DEVID": ("baro_type", _BARO_DEVTYPES),
 }
+
+# PARAM_REQUEST_READ is fire-and-forget -- if its PARAM_VALUE reply gets
+# dropped (packet loss, board still busy right after boot), nothing
+# else ever asks again and the type field is stuck blank forever even
+# though the sensor's own streamed messages (which don't need a reply)
+# keep the LED green and the live value updating. Re-request on this
+# interval for any devid param whose type hasn't arrived yet.
+DEVID_RETRY_INTERVAL_S = 1.5
 
 
 @dataclass
@@ -145,6 +153,10 @@ class MavlinkHealthMonitor:
         self._snapshot = HealthSnapshot()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        # devid params whose PARAM_VALUE reply hasn't arrived yet -- see
+        # _retry_missing_devid_params for why these need re-requesting.
+        self._devid_pending: set[str] = set(_DEVID_PARAMS)
+        self._devid_last_request = 0.0
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -170,9 +182,19 @@ class MavlinkHealthMonitor:
                 now = time.monotonic()
                 if msg is not None:
                     self._handle_message(msg, now)
+                self._retry_missing_devid_params(conn, now)
                 self._update_snapshot(now)
         finally:
             conn.close()
+
+    def _retry_missing_devid_params(self, conn, now: float) -> None:
+        if not self._devid_pending:
+            return
+        if now - self._devid_last_request < DEVID_RETRY_INTERVAL_S:
+            return
+        self._devid_last_request = now
+        for param_name in self._devid_pending:
+            conn.param_fetch_one(param_name)
 
     def _connect_and_wait(self):
         """Retry a heartbeat until the boot window elapses.
@@ -238,8 +260,11 @@ class MavlinkHealthMonitor:
             self._snapshot.autopilot_type = mavutil.mavlink.enums["MAV_AUTOPILOT"].get(
                 hb.autopilot, mavutil.mavlink.enums["MAV_AUTOPILOT"][0]
             ).name
+        # Initial devid fetch happens here; _retry_missing_devid_params in
+        # the main loop re-requests any that never get a reply.
         for param_name in _DEVID_PARAMS:
             conn.param_fetch_one(param_name)
+        self._devid_last_request = now
         return conn
 
     def _diagnose_no_heartbeat(self) -> None:
@@ -291,6 +316,7 @@ class MavlinkHealthMonitor:
         elif msg_type == "PARAM_VALUE":
             field = _DEVID_PARAMS.get(msg.param_id)
             if field is not None:
+                self._devid_pending.discard(msg.param_id)
                 attr, table = field
                 dev_id = int(msg.param_value)
                 with self._lock:

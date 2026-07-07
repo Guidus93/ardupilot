@@ -139,3 +139,24 @@
       Unit-tested: fullwidth-IME QR parsing, idle-submit firing without
       Enter, and scan-retry recovering from a scripted flaky
       `find_candidate_ports` (fails N times then succeeds).
+
+## Done (cont. 8)
+- [x] Fixed IMU/baro chip type sometimes never appearing even though
+      the LED is green and the live value (accel magnitude / pressure)
+      is showing. Root cause: `PARAM_REQUEST_READ` is fire-and-forget
+      MAVLink -- `_try_heartbeat` sent it exactly once per param right
+      after connecting, and if that single `PARAM_VALUE` reply got
+      dropped (packet loss, board still busy right after boot),
+      nothing ever asked again. Meanwhile the LED and live value come
+      from RAW_IMU/SCALED_IMU2/SCALED_PRESSURE, which stream
+      continuously and don't need a reply, so they kept working fine
+      -- which is why disconnect/reconnect "fixed" it (re-rolls the
+      one-shot request) but nothing short of that did.
+      Fix: track which devid params are still pending in
+      `_devid_pending`, and re-request any that haven't arrived every
+      `DEVID_RETRY_INTERVAL_S` (1.5s) from the main receive loop, not
+      just once at connect time. Stops retrying a given param as soon
+      as its `PARAM_VALUE` reply lands. Unit-tested with a fake
+      connection that "drops" some params on the first request and
+      confirmed the retry loop asks again only for the missing ones,
+      not on every tick.
